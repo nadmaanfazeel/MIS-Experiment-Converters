@@ -1,0 +1,54 @@
+name: MIS Dashboard Sync
+
+on:
+  workflow_dispatch:
+    inputs:
+      month:
+        description: "Month id to publish (e.g. jul)"
+        required: true
+      prev_month:
+        description: "Previous month id (e.g. jun)"
+        required: true
+  repository_dispatch:
+    types: [sync]
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install libraries
+        run: pip install -r requirements.txt
+
+      - name: Work out which month
+        id: m
+        run: |
+          echo "month=${{ github.event.inputs.month || github.event.client_payload.month }}" >> "$GITHUB_OUTPUT"
+          echo "prev=${{ github.event.inputs.prev_month || github.event.client_payload.prev_month }}" >> "$GITHUB_OUTPUT"
+
+      - name: Download this month's files from SharePoint
+        env:
+          TENANT_ID: ${{ secrets.TENANT_ID }}
+          CLIENT_ID: ${{ secrets.CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+          SHAREPOINT_HOST: ${{ secrets.SHAREPOINT_HOST }}
+          SHAREPOINT_SITE: ${{ secrets.SHAREPOINT_SITE }}
+          SHAREPOINT_FOLDER: ${{ secrets.SHAREPOINT_FOLDER }}
+        run: python fetch_sharepoint.py --out ./month_files
+
+      - name: Run the pipeline and publish to Supabase
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          python supabase_connect/run_pipeline.py \
+            --month "${{ steps.m.outputs.month }}" \
+            --prev-month "${{ steps.m.outputs.prev }}" \
+            --files-dir ./month_files
