@@ -3,11 +3,11 @@ name: MIS Dashboard Sync
 on:
   workflow_dispatch:
     inputs:
-      month:
-        description: "Month id to publish (e.g. jul)"
+      month_folder:
+        description: "This month's SharePoint folder name (e.g. Jul'26)"
         required: true
-      prev_month:
-        description: "Previous month id (e.g. jun)"
+      prev_month_folder:
+        description: "Previous month's folder name (e.g. Jun'26)"
         required: true
   repository_dispatch:
     types: [sync]
@@ -27,21 +27,25 @@ jobs:
       - name: Install libraries
         run: pip install -r requirements.txt
 
-      - name: Work out which month
+      - name: Work out the month ids
         id: m
+        env:
+          MF: ${{ github.event.inputs.month_folder || github.event.client_payload.month_folder }}
+          PF: ${{ github.event.inputs.prev_month_folder || github.event.client_payload.prev_month_folder }}
         run: |
-          echo "month=${{ github.event.inputs.month || github.event.client_payload.month }}" >> "$GITHUB_OUTPUT"
-          echo "prev=${{ github.event.inputs.prev_month || github.event.client_payload.prev_month }}" >> "$GITHUB_OUTPUT"
+          echo "month_folder=$MF" >> "$GITHUB_OUTPUT"
+          echo "month=$(echo "$MF" | cut -c1-3 | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+          echo "prev=$(echo "$PF" | cut -c1-3 | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
       - name: Download this month's files from SharePoint
         env:
           TENANT_ID: ${{ secrets.TENANT_ID }}
           CLIENT_ID: ${{ secrets.CLIENT_ID }}
           CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
-          SHAREPOINT_HOST: ${{ secrets.SHAREPOINT_HOST }}
-          SHAREPOINT_SITE: ${{ secrets.SHAREPOINT_SITE }}
-          SHAREPOINT_FOLDER: ${{ secrets.SHAREPOINT_FOLDER }}
-        run: python fetch_sharepoint.py --out ./month_files
+          SHAREPOINT_DRIVE_ID: ${{ secrets.SHAREPOINT_DRIVE_ID }}
+          SHAREPOINT_BASE: ${{ secrets.SHAREPOINT_BASE }}
+          MF: ${{ steps.m.outputs.month_folder }}
+        run: python fetch_sharepoint.py --out ./month_files --month-folder "$MF"
 
       - name: Run the pipeline and publish to Supabase
         env:
