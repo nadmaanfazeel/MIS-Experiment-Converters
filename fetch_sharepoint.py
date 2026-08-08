@@ -1,71 +1,91 @@
 # -*- coding: utf-8 -*-
-"""fetch_sharepoint.py — download this month's Excel files from a SharePoint folder.
-
-Uses Microsoft Graph app-only auth (client credentials).  Downloads every .xlsx in the
-configured folder into --out.  run_pipeline.py then matches each file to its converter by
-filename prefix, so the folder just needs the 16 files named consistently, e.g.
-    GRR_NRR_Ratios_Jul_26.xlsx, HR_Jul_26.xlsx, Full_P_L_Jul_26.xlsx, ...
-
-Env (set as GitHub secrets):
-  TENANT_ID           Azure AD tenant id
-  CLIENT_ID           app registration (client) id
-  CLIENT_SECRET       app registration client secret
-  SHAREPOINT_HOST     e.g. rategain.sharepoint.com
-  SHAREPOINT_SITE     site path, e.g. /sites/FPandA           (the part after the host)
-  SHAREPOINT_FOLDER   folder path inside the site's default drive, e.g. MIS/2026-07
-"""
-import os, sys, argparse, requests
+"""fetch_sharepoint.py - download ONE month's 16 Excel files from SharePoint."""
+import os, sys, argparse, requests, urllib.parse
 
 GRAPH = "https://graph.microsoft.com/v1.0"
 
+SECTIONS = {
+    "CPI Tracker": "CPI_Tracker", "Executive Summary": "Executive_Summary",
+    "Growth & Margin Snapshot": "Growth", "GRR NRR Ratios": "GRR_NRR", "HR": "HR_",
+    "Infra Cost": "Infra_Cost", "Key KPIs": "Key_KPIs", "Monetization": "Monetization",
+    "Regional Revenue": "Regional_Revenue", "Revenue by BU": "Revenue_by_BU",
+    "SG&A Expense": "SG_A", "Sojern": "Sojern", "Top Accounts": "Top_Accounts",
+    "Travel Expense": "Travel_Expense",
+}
+
 def token():
     t = os.environ["TENANT_ID"]
-    r = requests.post(
-        f"https://login.microsoftonline.com/{t}/oauth2/v2.0/token",
-        data={"client_id": os.environ["CLIENT_ID"],
-              "client_secret": os.environ["CLIENT_SECRET"],
-              "scope": "https://graph.microsoft.com/.default",
-              "grant_type": "client_credentials"}, timeout=30)
-    r.raise_for_status()
-    return r.json()["access_token"]
+    r = requests.post("https://login.microsoftonline.com/%s/oauth2/v2.0/token" % t,
+        data={"client_id": os.environ["CLIENT_ID"], "client_secret": os.environ["CLIENT_SECRET"],
+              "scope": "https://graph.microsoft.com/.default", "grant_type": "client_credentials"}, timeout=30)
+    r.raise_for_status(); return r.json()["access_token"]
+
+def resolve_drive(h):
+    d = os.environ.get("SHAREPOINT_DRIVE_ID", "").strip()
+    if d:
+        return d
+    host = os.environ["SHAREPOINT_HOST"]; site = os.environ["SHAREPOINT_SITE"]
+    site_id = requests.get("%s/sites/%s:%s" % (GRAPH, host, site), headers=h, timeout=30).json()["id"]
+    lib = os.environ.get("SHAREPOINT_LIBRARY", "").strip()
+    if not lib:
+        return requests.get("%s/sites/%s/drive" % (GRAPH, site_id), headers=h, timeout=30).json()["id"]
+    for dv in requests.get("%s/sites/%s/drives" % (GRAPH, site_id), headers=h, timeout=30).json().get("value", []):
+        if dv.get("name", "").lower() == lib.lower():
+            return dv["id"]
+    sys.exit("HALT: library '%s' not found" % lib)
+
+def children(h, drive, path):
+    p = urllib.parse.quote(path)
+    url = "%s/drives/%s/root:/%s:/children" % (GRAPH, drive, p)
+    out = []
+    while url:
+        r = requests.get(url, headers=h, timeout=30); r.raise_for_status(); j = r.json()
+        out += j.get("value", []); url = j.get("@odata.nextLink")
+    return out
+
+def dl(item, dest):
+    u = item.get("@microsoft.graph.downloadUrl")
+    if not u: return False
+    open(dest, "wb").write(requests.get(u, timeout=120).content); return True
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="./month_files")
-    ap.add_argument("--folder", default=os.environ.get("SHAREPOINT_FOLDER", ""))
+    ap.add_argument("--month-folder", required=True, help="e.g. Jun'26")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     h = {"Authorization": "Bearer " + token()}
+    drive = resolve_drive(h)
+    base = os.environ.get("SHAREPOINT_BASE", "MIS/2026-2027/MIS_Automation_FY27").strip("/")
+    month = a.month_folder
+    tag = month.replace("'", "").replace("\u2019", "")
 
-    host = os.environ["SHAREPOINT_HOST"]; site = os.environ["SHAREPOINT_SITE"]
-    site_meta = requests.get(f"{GRAPH}/sites/{host}:{site}", headers=h, timeout=30)
-    site_meta.raise_for_status()
-    site_id = site_meta.json()["id"]
+    got, missing = 0, []
+    for folder, prefix in SECTIONS.items():
+        try:
+            kids = children(h, drive, "%s/%s/%s" % (base, folder, month))
+        except Exception:
+            missing.append(folder); continue
+        xls = [k for k in kids if k.get("name", "").lower().endswith((".xlsx", ".xlsm"))]
+        if not xls:
+            missing.append(folder); continue
+        ext = os.path.splitext(xls[0]["name"])[1]
+        if dl(xls[0], os.path.join(a.out, prefix + "_" + tag + ext)):
+            print("  %s -> %s%s" % (folder, prefix, ext)); got += 1
 
-    # list children of the target folder in the site's default document library
-    folder = a.folder.strip("/")
-    url = (f"{GRAPH}/sites/{site_id}/drive/root:/{folder}:/children"
-           if folder else f"{GRAPH}/sites/{site_id}/drive/root/children")
-    got = 0
-    while url:
-        resp = requests.get(url, headers=h, timeout=30); resp.raise_for_status()
-        data = resp.json()
-        for it in data.get("value", []):
-            name = it.get("name", "")
-            if not name.lower().endswith((".xlsx", ".xlsm")):
-                continue
-            dl = it.get("@microsoft.graph.downloadUrl")
-            if not dl:
-                continue
-            content = requests.get(dl, timeout=120).content
-            with open(os.path.join(a.out, name), "wb") as f:
-                f.write(content)
-            print(f"  downloaded {name} ({len(content)//1024} KB)")
-            got += 1
-        url = data.get("@odata.nextLink")
-    print(f"fetch_sharepoint: {got} files -> {a.out}")
-    if got == 0:
-        sys.exit("HALT: no .xlsx files found in the SharePoint folder")
+    try:
+        for k in children(h, drive, "%s/P&L/%s" % (base, month)):
+            n = k.get("name", "")
+            if not n.lower().endswith((".xlsx", ".xlsm")): continue
+            pref = "Consolidated_P_L" if "consol" in n.lower() else ("Full_P_L" if "full" in n.lower() else None)
+            if pref and dl(k, os.path.join(a.out, pref + "_" + tag + os.path.splitext(n)[1])):
+                print("  P&L -> %s" % pref); got += 1
+    except Exception:
+        missing.append("P&L")
+
+    print("fetch_sharepoint: %d files -> %s" % (got, a.out))
+    if missing: print("  WARNING missing:", ", ".join(missing))
+    if got < 16: sys.exit("HALT: expected 16 files, got %d (month folder '%s')." % (got, month))
 
 if __name__ == "__main__":
     main()
