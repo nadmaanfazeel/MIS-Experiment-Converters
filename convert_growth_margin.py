@@ -352,5 +352,5 @@ if __name__ == '__main__':
     json.dump({'standardized': R, 'dashboard_preview': P, 'validate': {'pass': ok, 'messages': msg}},
               open((__import__('os').environ.get('STD_OUT') or '/mnt/user-data/outputs')+'/growth_margin_STANDARDIZED.json', 'w'),
               ensure_ascii=False, indent=1)
-    write_xlsx(R, P, '/mnt/user-data/outputs/Growth_Margin_STANDARDIZED_Jun26.xlsx')
+    write_xlsx(R, P, (__import__('os').environ.get('STD_OUT') or '/mnt/user-data/outputs')+'/Growth_Margin_STANDARDIZED_Jun26.xlsx')
     print("\nWrote growth_margin_STANDARDIZED.json + Growth_Margin_STANDARDIZED_Jun26.xlsx")
