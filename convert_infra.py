@@ -42,10 +42,30 @@ def kind_breakdown(label):
     if l == 'cogs': return 'cogs'
     return 'comp'
 
+# ---------- default node registry (used when the workbook has no 'Meta' tab) ----------
+# Sheet name -> (node_id, parent, display name, colour, order). Mirrors the dashboard Infra tree.
+DEFAULT_INFRA_NODES = [
+    {"tab":"Consolidated","node_id":"root","parent":"","name":"Consolidated","col":"#5E0FC0","order":0},
+    {"tab":"DaaS","node_id":"daas","parent":"root","name":"DaaS","col":"#8012FF","order":1},
+    {"tab":"Distribution","node_id":"dist","parent":"root","name":"Distribution","col":"#0E7C86","order":2},
+    {"tab":"MarTech","node_id":"martech","parent":"root","name":"MarTech","col":"#C026D3","order":3},
+    {"tab":"PG-Car + Rev.AI","node_id":"ic-pgcar","parent":"daas","name":"PG-Car + Rev.AI","col":"#A35BFF","order":1},
+    {"tab":"PG-OTA","node_id":"ic-pgota","parent":"daas","name":"PG-OTA","col":"#8012FF","order":2},
+    {"tab":"PG-Air + PG-Cruise","node_id":"ic-pgair","parent":"daas","name":"PG-Air + PG-Cruise","col":"#6B46E0","order":3},
+    {"tab":"HospiBI","node_id":"ic-hospibi","parent":"daas","name":"HospiBI","col":"#5E0FC0","order":4},
+    {"tab":"RezGain","node_id":"ic-rez","parent":"dist","name":"RezGain","col":"#0E7C86","order":1},
+    {"tab":"UNO","node_id":"ic-uno","parent":"dist","name":"UNO","col":"#3F6AD8","order":2},
+    {"tab":"Enterprise Connectivity","node_id":"ic-ec","parent":"dist","name":"Enterprise Connectivity","col":"#1E88C5","order":3},
+    {"tab":"Sojern","node_id":"ic-sojern","parent":"martech","name":"Sojern","col":"#7A2BE8","order":1},
+    {"tab":"SoHo","node_id":"ic-soho","parent":"martech","name":"SoHo","col":"#E0559B","order":2},
+]
+
 # ---------- Meta ----------
 def read_meta(wb):
     m = {'nodes': []}
-    if 'Meta' not in wb.sheetnames: return m
+    if 'Meta' not in wb.sheetnames:
+        m['nodes'] = [dict(n) for n in DEFAULT_INFRA_NODES]
+        return m
     mode = None
     for row in grid(wb['Meta']):
         c = [txt(x) for x in row] + ['', '', '', '', '', '']
@@ -58,6 +78,8 @@ def read_meta(wb):
         elif mode == 'nodes' and c[0]:
             m['nodes'].append({'tab': c[0], 'node_id': c[1], 'parent': c[2], 'name': c[3],
                                'col': c[4], 'order': int(c[5]) if str(c[5]).isdigit() else 99})
+    if not m['nodes']:
+        m['nodes'] = [dict(n) for n in DEFAULT_INFRA_NODES]
     return m
 
 # ---------- block extraction ----------
