@@ -240,5 +240,5 @@ if __name__ == '__main__':
     for x in msg: print("   -", x)
     json.dump({'standardized': R, 'validate': {'pass': ok, 'messages': msg}},
               open((__import__('os').environ.get('STD_OUT') or '/mnt/user-data/outputs')+'/infra_STANDARDIZED.json', 'w'), ensure_ascii=False, indent=1)
-    write_xlsx(R, '/mnt/user-data/outputs/Infra_Cost_STANDARDIZED_Jun26.xlsx')
+    write_xlsx(R, (__import__('os').environ.get('STD_OUT') or '/mnt/user-data/outputs')+'/Infra_Cost_STANDARDIZED_Jun26.xlsx')
     print("\nWrote infra_STANDARDIZED.json + Infra_Cost_STANDARDIZED_Jun26.xlsx")
