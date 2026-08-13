@@ -374,5 +374,5 @@ if __name__ == '__main__':
     print("\nVALIDATE:", ("PASS" if ok else "FAIL"), "|", '; '.join(msg))
     json.dump({'standardized': R, 'es_preview': ES, 'validate': {'pass': ok, 'messages': msg}},
               open((__import__('os').environ.get('STD_OUT') or '/mnt/user-data/outputs')+'/exec_summary_STANDARDIZED.json', 'w'), ensure_ascii=False, indent=1)
-    write_xlsx(R, ES, '/mnt/user-data/outputs/Executive_Summary_STANDARDIZED_Jun26.xlsx')
+    write_xlsx(R, ES, (__import__('os').environ.get('STD_OUT') or '/mnt/user-data/outputs')+'/Executive_Summary_STANDARDIZED_Jun26.xlsx')
     print("\nWrote exec_summary_STANDARDIZED.json + Executive_Summary_STANDARDIZED_Jun26.xlsx")
