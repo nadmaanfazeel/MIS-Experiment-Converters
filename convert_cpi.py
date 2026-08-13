@@ -319,5 +319,5 @@ if __name__ == '__main__':
     print("\nVALIDATE:", ("PASS" if ok else "FAIL"), "|", ' ; '.join(msg))
     json.dump({'standardized': R, 'rollup': rolls, 'grand_total': gt, 'validate': {'pass': ok, 'messages': msg}},
               open((__import__('os').environ.get('STD_OUT') or '/mnt/user-data/outputs')+'/cpi_STANDARDIZED.json', 'w'), ensure_ascii=False, indent=1)
-    write_xlsx(R, rolls, gt, '/mnt/user-data/outputs/CPI_Tracker_STANDARDIZED_Jun26.xlsx')
+    write_xlsx(R, rolls, gt, (__import__('os').environ.get('STD_OUT') or '/mnt/user-data/outputs')+'/CPI_Tracker_STANDARDIZED_Jun26.xlsx')
     print("\nWrote cpi_STANDARDIZED.json + CPI_Tracker_STANDARDIZED_Jun26.xlsx")
